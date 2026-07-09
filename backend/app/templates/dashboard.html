@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LifeOS Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #c9d1d9; --dim: #8b949e; --green: #3fb950;
+    --red: #f85149; --yellow: #d2991d; --blue: #58a6ff;
+    --cyan: #39d2c0; --purple: #bc8cff; --orange: #d2991d;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', Consolas, monospace;
+    height: 100vh; display: flex; flex-direction: column;
+  }
+  #header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  #header h1 { font-size:16px; color:var(--cyan); }
+  #status { font-size:12px; padding:3px 10px; border-radius:10px; font-weight:bold; }
+  #status.online { background:#1a3a1a; color:var(--green); }
+  .btn {
+    background: #21262d; color: var(--text); border: 1px solid var(--border);
+    padding: 5px 12px; border-radius: 5px; cursor: pointer; font-size: 11px; text-decoration:none;
+  }
+  .btn:hover { background: #30363d; }
+  .btn.danger { color: var(--red); border-color: var(--red); }
+  #main { display: flex; flex: 1; overflow: hidden; }
+  #sidebar {
+    width: 250px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 10px; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;
+  }
+  .section { }
+  .section h3 { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+  .stat-row { display:flex; justify-content:space-between; font-size:11px; padding:1px 0; }
+  .stat-row .label { color:var(--dim); }
+  .stat-row .val { font-weight:bold; }
+  .pipe-step {
+    display:flex; align-items:center; gap:6px; font-size:11px; padding:3px 6px;
+    border-radius:4px; margin-bottom:2px;
+  }
+  .pipe-step .icon { width:18px; text-align:center; }
+  .pipe-step .label { color:var(--dim); flex:1; }
+  .pipe-step .value { font-weight:bold; font-size:10px; }
+  .pipe-step.pending { opacity:0.4; }
+  .pipe-step.active { background:#1c2128; }
+  .pipe-step.done { opacity:0.7; }
+  .pipe-step.ok { color:var(--green); }
+  .pipe-step.err { color:var(--red); background:rgba(248,81,73,0.12); }
+  .pipe-arrow { text-align:center; color:var(--dim); font-size:9px; }
+  /* log area */
+  #log-container { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  #log-toolbar {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 4px 10px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  #log-toolbar span { font-size:11px; color:var(--dim); }
+  #log-filter { margin-left:auto; display:flex; gap:8px; }
+  #log-filter label { color:var(--dim); cursor:pointer; font-size:10px; }
+  #log-filter input { margin-right:2px; }
+  #log-output {
+    flex:1; overflow-y:auto; padding:6px 10px; font-size:11px; line-height:1.4;
+    font-family: 'Cascadia Code', Consolas, monospace; background: var(--bg);
+  }
+  #log-output .line { white-space:pre-wrap; word-break:break-all; }
+  #log-output .line .time { color:var(--dim); margin-right:4px; }
+  .error-item {
+    color: var(--red); font-size:10px; padding:3px 6px; margin:2px 0;
+    background: rgba(248,81,73,0.1); border-left:2px solid var(--red);
+    border-radius:2px; word-break:break-all;
+  }
+  .error-item .err-time { color:var(--dim); font-size:9px; }
+  /* red highlight in console */
+  #log-output .line.ERROR { background: rgba(248,81,73,0.08); }
+  #log-output .line.ERROR .msg { color: var(--red); font-weight:bold; }
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius:3px; }
+  @media (max-width: 700px) { #sidebar { display:none; } }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🛟 LifeOS</h1>
+  <div id="status" class="online">● LIVE</div>
+  <span id="conn-status" style="font-size:10px;color:var(--yellow)">ws...</span>
+  <span id="log-count" style="font-size:10px;color:var(--dim);margin-left:auto">0</span>
+  <a href="/memory" target="_blank" class="btn">📝 Memory</a>
+  <a href="/docs" target="_blank" class="btn">📖 Docs</a>
+  <button class="btn danger" onclick="clearChroma()">🗑 Clear</button>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+
+    <!-- PIPELINE -->
+    <div class="section">
+      <h3>⚡ Pipeline</h3>
+      <div id="pipe-asr" class="pipe-step pending"><span class="icon">🎤</span><span class="label">ASR</span><span class="value"></span></div>
+      <div class="pipe-arrow">▼</div>
+      <div id="pipe-rag" class="pipe-step pending"><span class="icon">🧠</span><span class="label">RAG</span><span class="value"></span></div>
+      <div class="pipe-arrow">▼</div>
+      <div id="pipe-agent" class="pipe-step pending"><span class="icon">🤖</span><span class="label">Agent</span><span class="value"></span></div>
+      <div class="pipe-arrow">▼</div>
+      <div id="pipe-llm" class="pipe-step pending"><span class="icon">💬</span><span class="label">LLM</span><span class="value"></span></div>
+      <div class="pipe-arrow">▼</div>
+      <div id="pipe-raw" class="pipe-step pending"><span class="icon">📝</span><span class="label">Ingest</span><span class="value"></span></div>
+    </div>
+
+    <!-- MEMORY -->
+    <div class="section">
+      <h3>🧠 Memory</h3>
+      <div class="stat-row"><span class="label">ChromaDB medium</span><span class="val" id="mem-chroma-m" style="color:var(--yellow)">-</span></div>
+      <div class="stat-row"><span class="label">ChromaDB long</span><span class="val" id="mem-chroma-l" style="color:var(--green)">-</span></div>
+      <div class="stat-row"><span class="label">MySQL memories</span><span class="val" id="mem-mysql" style="color:var(--blue)">-</span></div>
+      <div class="stat-row"><span class="label">Last ingest</span><span class="val" id="mem-last-extract" style="color:var(--dim);font-size:10px;">-</span></div>
+    </div>
+
+    <!-- AGENT -->
+    <div class="section">
+      <h3>🤖 Agent</h3>
+      <div class="stat-row"><span class="label">State</span><span class="val" id="ag-state" style="color:var(--dim)">idle</span></div>
+      <div class="stat-row"><span class="label">Decision</span><span class="val" id="ag-decision" style="color:var(--dim);font-size:10px;">-</span></div>
+      <div class="stat-row"><span class="label">Tool</span><span class="val" id="ag-tool" style="color:var(--purple);font-size:10px;">-</span></div>
+      <div class="stat-row"><span class="label">Steps</span><span class="val" id="ag-steps" style="color:var(--dim);font-size:10px;">-</span></div>
+    </div>
+
+    <!-- ERRORS -->
+    <div class="section" id="error-section" style="display:none;">
+      <h3 style="color:var(--red);">❌ Errors</h3>
+      <div id="error-list" style="font-size:10px; max-height:150px; overflow-y:auto;"></div>
+      <button class="btn danger" onclick="clearErrors()" style="margin-top:4px;font-size:9px;padding:2px 8px;">Clear</button>
+    </div>
+
+    <!-- AGENT TRACE -->
+    <div class="section">
+      <h3>🔍 Agent Trace</h3>
+      <div id="trace-list" style="font-size:10px; max-height:180px; overflow-y:auto; color:var(--dim);">
+        (no traces yet)
+      </div>
+      <button class="btn" onclick="loadTraces()" style="margin-top:4px;font-size:9px;padding:2px 8px;">↻ Refresh</button>
+    </div>
+
+    <!-- CONVERSATION -->
+    <div class="section">
+      <h3>📞 Last Conversation</h3>
+      <div class="stat-row"><span class="label">ID</span><span class="val" id="conv-id" style="font-size:10px;color:var(--dim)">-</span></div>
+      <div class="stat-row"><span class="label">Messages</span><span class="val" id="conv-msgs" style="color:var(--dim)">-</span></div>
+      <div class="stat-row"><span class="label">Tokens</span><span class="val" id="conv-tokens" style="color:var(--dim)">-</span></div>
+    </div>
+
+  </div>
+
+  <div id="log-container">
+    <div id="log-toolbar">
+      <span>📜 Console</span>
+      <span id="log-status" style="color:var(--yellow);font-size:10px;">⏳</span>
+      <div id="log-filter">
+        <label><input type="checkbox" class="level-filter" data-level="INFO" checked>I</label>
+        <label><input type="checkbox" class="level-filter" data-level="WARNING" checked>W</label>
+        <label><input type="checkbox" class="level-filter" data-level="ERROR" checked>E</label>
+      </div>
+      <button class="btn" onclick="clearLogs()" style="font-size:10px;padding:3px 8px;">Clear</button>
+    </div>
+    <div id="log-output"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let totalLogs = 0, autoScroll = true;
+let activeLevels = new Set(['INFO','WARNING','ERROR']);
+let lastConv = {};
+
+// ── DOM refs ──
+const $ = id => document.getElementById(id);
+const logOutput = $('log-output');
+const pipeSteps = ['asr','rag','agent','llm','raw'];
+
+function resetPipeline() {
+  pipeSteps.forEach(s => {
+    const el = $('pipe-'+s);
+    el.className = 'pipe-step pending';
+    el.querySelector('.value').textContent = '';
+  });
+}
+
+function setPipe(step, state, value) {
+  const el = $('pipe-'+step);
+  el.className = 'pipe-step ' + state;
+  el.querySelector('.value').textContent = value || '';
+  // mark previous steps as done
+  const idx = pipeSteps.indexOf(step);
+  for (let i = 0; i < idx; i++) {
+    const prev = $('pipe-'+pipeSteps[i]);
+    if (prev.classList.contains('pending')) {
+      prev.className = 'pipe-step done ok';
+    }
+  }
+}
+
+// ── Error tracking ──
+let errors = [];
+
+function addError(log) {
+  errors.push(log);
+  if (errors.length > 50) errors.shift();
+  $('error-section').style.display = 'block';
+  const list = $('error-list');
+  const div = document.createElement('div');
+  div.className = 'error-item';
+  div.innerHTML = `<span class="err-time">${log.time}</span> ${escapeHtml(log.msg)}`;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+  // Mark pipeline step as error
+  const m = log.msg || '';
+  if (m.includes('WS error') || m.includes('Agent')) setPipe('agent','err','❌');
+  if (m.includes('LLM') || m.includes('chat_complete') || m.includes('stream_chat')) setPipe('llm','err','❌');
+}
+
+function clearErrors() {
+  errors = [];
+  $('error-list').innerHTML = '';
+  $('error-section').style.display = 'none';
+}
+
+// ── Log parser: update all panels from log messages ──
+function parseAndUpdate(log) {
+  const m = log.msg || '';
+
+  // Errors → highlight in pipeline + error panel
+  if (log.level === 'ERROR') {
+    addError(log);
+    if (m.includes('WS error')) setPipe('agent','err','❌ WS');
+    if (m.includes('LLM') || m.includes('chat_complete') || m.includes('stream_chat')) setPipe('llm','err','❌ API');
+    if (m.includes('save_memory failed') || m.includes('forget_memory')) setPipe('raw','err','❌');
+  }
+
+  // ── Pipeline ──
+  if (m.startsWith('ASR raw:')) { resetPipeline(); setPipe('asr','active ok', m.slice(9,40)); }
+  if (m.includes('ASR corrected:')) setPipe('asr','done ok','corrected ✓');
+  if (m.startsWith('RAG: detected category')) setPipe('rag','active ok', m.match(/category = (\w+)/)?.[1] || '');
+  if (m.includes('medium +') && m.includes('long')) {
+    const match = m.match(/(\d+) medium \+ (\d+) long/);
+    if (match) setPipe('rag','done ok', `m:${match[1]} l:${match[2]}`);
+    $('mem-chroma-m').textContent = match?.[1] || '-';
+    $('mem-chroma-l').textContent = match?.[2] || '-';
+  }
+  if (m.includes('RAG injected')) setPipe('rag','done ok','injected ✓');
+  if (m.startsWith('Agent lookup:')) setPipe('agent','active ok', m.includes('True')?'✓':'✗ fallback');
+  if (m.startsWith('[LifeOS] think')) {
+    if (m.includes('use_tool')) { setPipe('agent','active ok','→ tool'); }
+    else if (m.includes('respond')) { setPipe('agent','done ok','→ respond'); }
+  }
+  if (m.startsWith('[LifeOS] step')) {
+    const sm = m.match(/step (\d+)\/.*tool (\w+)/);
+    if (sm) setPipe('agent','active ok', `step ${sm[1]}:${sm[2]}`);
+  }
+  if (m.includes('WS stream complete')) {
+    setPipe('llm','done ok', m.match(/(\d+) chars/)?.[1]+'ch' || '✓');
+  }
+  if (m.includes('Saved assistant message')) {
+    const tm = m.match(/(\d+) tokens/);
+    if (tm) setPipe('llm','done ok', tm[1]+' tok');
+  }
+  if (m.startsWith('Raw ingest:')) {
+    const ri = m.match(/(\d+)×7d \+ (\d+)×3d/);
+    if (ri) setPipe('raw','done ok', `+${ri[1]}m`);
+  }
+  if (m.includes('save_memory:')) {
+    try {
+      const idx = m.indexOf('{"action"');
+      if (idx > -1) {
+        const d = JSON.parse(m.slice(idx));
+        if (d.action === 'duplicate') setPipe('agent','done ok', `dup(${d.existing_content?.slice(0,12)})`);
+        else setPipe('agent','done ok', `saved ✓`);
+      }
+    } catch { setPipe('agent','done ok', 'saved ✓'); }
+  }
+  if (m.includes('forget_memory:')) {
+    try {
+      const idx = m.indexOf('{"action"');
+      if (idx > -1) { const d = JSON.parse(m.slice(idx)); setPipe('agent','done ok', `del×${d.deleted}`); }
+    } catch { setPipe('agent','done ok', 'del ✓'); }
+  }
+  if (m.includes('POST /chat/send')) {
+    const cid = m.match(/chat\/send.*200/);
+    if (cid) resetPipeline();
+  }
+
+  // ── Agent panel ──
+  if (m.startsWith('[LifeOS] think')) {
+    if (m.includes('use_tool')) {
+      $('ag-state').innerHTML = '🔵 THINK'; $('ag-state').style.color = '#58a6ff';
+      const tm = m.match(/use_tool:\s*(\w+)/);
+      $('ag-decision').textContent = 'call tool'; $('ag-tool').textContent = tm?.[1] || '';
+    } else if (m.includes('respond')) {
+      $('ag-state').innerHTML = '🟢 REPLY'; $('ag-state').style.color = '#3fb950';
+      $('ag-decision').textContent = 'respond'; $('ag-tool').textContent = '';
+    }
+  }
+  if (m.startsWith('[LifeOS] step')) {
+    const sm = m.match(/step (\d+)\/.*→ (\d+) chars/);
+    if (sm) $('ag-steps').textContent = `step ${sm[1]}: ${sm[2]}ch`;
+  }
+  if (m.includes('Agent lookup:') && m.includes('True')) {
+    if ($('ag-state').textContent.includes('idle')) {
+      $('ag-state').innerHTML = '⚪ READY'; $('ag-state').style.color = '#8b949e';
+    }
+  }
+  if (m.includes('WS stream complete') || m.includes('WS done')) {
+    setTimeout(() => {
+      $('ag-state').innerHTML = '⚪ idle'; $('ag-state').style.color = '#8b949e';
+      $('ag-decision').textContent = '-'; $('ag-tool').textContent = '-'; $('ag-steps').textContent = '-';
+    }, 3000);
+  }
+
+  // ── Conversation ──
+  if (m.includes('POST /chat/send')) {
+    const cid = m.match(/\/chat\/send.*200/);
+  }
+  if (m.includes('Saved assistant message')) {
+    const tok = m.match(/(\d+) tokens/)?.[1];
+    if (tok) $('conv-tokens').textContent = tok;
+  }
+  if (m.includes('WS received')) {
+    const msgs = m.match(/(\d+) messages/)?.[1];
+    if (msgs) $('conv-msgs').textContent = msgs;
+  }
+  if (m.includes('conversation_id')) {
+    const cid = m.match(/conversation_id.*: "(\w+)/)?.[1] || m.match(/conversation_id.*: (\w+)/)?.[1];
+    if (cid) { $('conv-id').textContent = cid.slice(0,12)+'...'; lastConv.id = cid; }
+  }
+  // Try from WS path
+  if (m.includes('WebSocket /ws/chat/')) {
+    const cid = m.match(/\/ws\/chat\/(\w+)/)?.[1];
+    if (cid) $('conv-id').textContent = cid.slice(0,12)+'...';
+  }
+
+  // ── Memory stats from RAG debug ──
+  if (m.includes('ChromaDB total documents')) {
+    const total = m.match(/=\s*(\d+)/)?.[1];
+    if (total) {
+      // keep medium/long from RAG line
+    }
+  }
+}
+
+// ── WebSocket ──
+function connectLogs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/logs`);
+
+  ws.onopen = () => {
+    $('conn-status').textContent = 'live';
+    $('conn-status').style.color = '#3fb950';
+    $('log-status').textContent = '🟢';
+  };
+  ws.onmessage = (e) => {
+    try {
+      const log = JSON.parse(e.data);
+      parseAndUpdate(log);
+      if (!activeLevels.has(log.level)) return;
+      // append to console
+      const div = document.createElement('div');
+      div.className = 'line';
+      div.innerHTML = `<span class="time">${log.time}</span>${escapeHtml(log.msg)}`;
+      logOutput.appendChild(div);
+      while (logOutput.children.length > 300) logOutput.removeChild(logOutput.firstChild);
+      if (autoScroll) logOutput.scrollTop = logOutput.scrollHeight;
+      totalLogs++;
+      $('log-count').textContent = totalLogs;
+    } catch(ex) {}
+  };
+  ws.onclose = () => {
+    $('conn-status').textContent = 'disconnected';
+    $('conn-status').style.color = '#f85149';
+    $('log-status').textContent = '🔴';
+    setTimeout(connectLogs, 3000);
+  };
+  ws.onerror = () => { $('conn-status').textContent = 'error'; $('conn-status').style.color = '#f85149'; };
+}
+
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function clearLogs() { logOutput.innerHTML = ''; totalLogs = 0; $('log-count').textContent = '0'; }
+
+// Level filters
+document.querySelectorAll('.level-filter').forEach(cb => {
+  cb.addEventListener('change', () => {
+    activeLevels.clear();
+    document.querySelectorAll('.level-filter:checked').forEach(c => activeLevels.add(c.dataset.level));
+  });
+});
+
+logOutput.addEventListener('scroll', () => {
+  autoScroll = (logOutput.scrollTop + logOutput.clientHeight) >= (logOutput.scrollHeight - 15);
+});
+
+// Clear ChromaDB
+async function clearChroma() {
+  if (!confirm('确认清空 ChromaDB？')) return;
+  await fetch('/rag/clear', { method: 'POST' });
+}
+
+// ── Memory stats poll ──
+async function loadMemStats() {
+  try {
+    const resp = await fetch('/rag/stats').then(r=>r.json());
+    $('mem-chroma-m').textContent = resp.chromadb?.medium ?? '-';
+    $('mem-chroma-l').textContent = resp.chromadb?.long ?? '-';
+    $('mem-mysql').textContent = resp.mysql_memories ?? '-';
+  } catch(e) {}
+}
+loadMemStats();
+setInterval(loadMemStats, 15000);
+
+// ── Agent Trace ──
+async function loadTraces() {
+  try {
+    const resp = await fetch('/agent/traces/latest?limit=5').then(r => r.json());
+    const list = $('trace-list');
+    if (!resp.length) { list.innerHTML = '<span style="color:var(--dim)">(no traces yet)</span>'; return; }
+    let html = '';
+    for (const t of resp) {
+      const sc = t.status === 'done' ? 'var(--green)' : t.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
+      html += `<div class="trace-item" data-tid="${t.task_id}" style="margin-bottom:4px;padding:3px 5px;background:#1c2128;border-radius:2px;cursor:pointer;" onclick="loadTraceDetail('${t.task_id}',this)">`;
+      html += `<span style="color:${sc};font-size:10px;">● ${t.status}</span> `;
+      html += `<span style="font-size:9px;color:var(--dim);">${t.created_at?.slice(11,19)||''}</span>`;
+      html += `<div style="color:var(--text);font-size:10px;">${escapeHtml(t.user_request||'')}</div>`;
+      html += `<span style="font-size:9px;color:var(--dim);">${t.total_tokens||0} tok</span>`;
+      html += `<div class="trace-detail" style="display:none;margin-top:4px;"></div>`;
+      html += `</div>`;
+    }
+    list.innerHTML = html;
+  } catch(e) {}
+}
+
+async function loadTraceDetail(taskId, el) {
+  const detailDiv = el.querySelector('.trace-detail');
+  if (detailDiv.style.display === 'block') { detailDiv.style.display = 'none'; return; }
+  try {
+    const resp = await fetch(`/agent/traces/detail/${taskId}`).then(r => r.json());
+    if (!resp || !resp.steps) return;
+    let html = '';
+    for (const s of resp.steps) {
+      const icon = s.action === 'respond' ? '💬' : s.action === 'think→use_tool' || s.action === 'use_tool' ? '🛠' : '🧠';
+      html += `<div style="padding:2px 4px;margin:1px 0;background:rgba(255,255,255,0.03);border-radius:2px;">`;
+      html += `${icon} <b>${s.action||'?'}</b>`;
+      if (s.tool) html += ` <span style="color:var(--purple);">${s.tool}</span>`;
+      if (s.ms) html += ` <span style="color:var(--dim);font-size:9px;">${s.ms}ms</span>`;
+      html += ` <span style="color:var(--dim);font-size:9px;">💰${s.tokens||0}</span>`;
+      if (s.result && s.result.found !== undefined) html += ` <span style="color:var(--yellow);">found:${s.result.found}</span>`;
+      if (s.result && s.result.deleted !== undefined) html += ` <span style="color:var(--red);">del:${s.result.deleted}</span>`;
+      html += `</div>`;
+    }
+    html += `<div style="font-size:9px;color:var(--dim);margin-top:2px;">total: ${resp.total_tokens} tok | ${resp.total_ms}ms</div>`;
+    detailDiv.innerHTML = html;
+    detailDiv.style.display = 'block';
+  } catch(e) { detailDiv.textContent = 'error'; detailDiv.style.display = 'block'; }
+}
+
+// ── Init ──
+connectLogs();
+loadMemStats();
+loadTraces();
+setInterval(loadMemStats, 15000);
+setInterval(loadTraces, 10000);
+</script>
+</body>
+</html>

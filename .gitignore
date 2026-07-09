@@ -1,0 +1,46 @@
+# ── Unity ──
+LifeOS/Library/
+LifeOS/Temp/
+LifeOS/Obj/
+LifeOS/Build/
+LifeOS/Logs/
+LifeOS/UserSettings/
+LifeOS/*.sln
+LifeOS/*.csproj
+LifeOS/*.userprefs
+
+# ── ONNX models (1.2GB+) ──
+LifeOS/Assets/StreamingAssets/models/
+*.onnx
+
+# ── Backend data ──
+backend/chroma_data/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/**/__pycache__/
+backend/*.pyc
+backend/.env
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ── IDE ──
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Ollama models ──
+.ollama/
+
+# ── Misc ──
+*.log

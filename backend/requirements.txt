@@ -1,0 +1,43 @@
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.18
+websockets==14.1
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+aiomysql==0.2.0
+pymysql==1.1.1
+alembic==1.14.0
+
+# Task Queue
+celery[redis]==5.4.0
+redis==5.2.1
+
+# AI / RAG
+langchain==0.3.14
+langchain-community==0.3.14
+langchain-openai==0.2.14
+chromadb>=0.6.0
+openai==1.58.1
+tiktoken>=0.9.0
+
+# Gaussian Splatting (GPU)
+gsplat==1.5.2
+# colmap-wrapper — install when GPU training is needed
+# Note: COLMAP must also be installed as system package
+
+# File Storage
+minio==7.2.10
+boto3==1.35.81
+
+# Auth & Config
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pydantic-settings==2.7.0
+
+# Utils
+httpx==0.28.1
+python-dotenv==1.0.1
+pillow>=11.2.0
+numpy
